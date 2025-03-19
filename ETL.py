@@ -15,41 +15,53 @@ df.drop(columns=[col for col in cols_to_drop if col in df.columns], inplace=True
 df['budget'].fillna(df['budget'].median(), inplace=True)
 df['revenue'].fillna(df['revenue'].median(), inplace=True)
 df['runtime'].fillna(df['runtime'].median(), inplace=True)
-
 df.dropna(subset=['title'], inplace=True)  # Eliminar si falta información clave
 
 # 3. Filtrar películas con menos de 10 votos
 df = df[df['vote_count'] >= 10]
 
-# 4. Normalización de 'vote_average'
-df['vote_average_norm'] = df['vote_average'] / 10  # Escalar entre 0 y 1
-
-# 5. Extraer año de 'release_date'
+# 4. Extraer año de 'release_date'
 df['release_year'] = pd.to_datetime(df['release_date'], errors='coerce').dt.year
 
 # Guardar dataset limpio
 df.to_csv('peliculas_procesadas.csv', index=False)
 
-# 6. Visualización con Streamlit
-st.title("Análisis y Transformación del Dataset de Películas")
+# Configuración de Streamlit
+st.title("Exploración de Datos de Películas")
+st.sidebar.header("Filtros")
 
-# Histograma de calificaciones
-st.subheader("Distribución de Calificaciones Antes y Después de Normalización")
-fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-sns.histplot(df['vote_average'], bins=20, kde=True, ax=ax[0])
-ax[0].set_title("Antes de Normalización")
-sns.histplot(df['vote_average_norm'], bins=20, kde=True, ax=ax[1])
-ax[1].set_title("Después de Normalización")
+# Filtros interactivos
+año_min, año_max = int(df['release_year'].min()), int(df['release_year'].max())
+selected_year = st.sidebar.slider("Selecciona un año de estreno", año_min, año_max, año_max)
+
+genres = df['genres'].dropna().unique().tolist()
+selected_genre = st.sidebar.selectbox("Selecciona un género", ["Todos"] + genres)
+
+# Filtrar datos según la selección
+df_filtered = df[df['release_year'] == selected_year]
+if selected_genre != "Todos":
+    df_filtered = df_filtered[df_filtered['genres'].str.contains(selected_genre, na=False)]
+
+# Mostrar dataset filtrado
+st.subheader(f"Películas estrenadas en {selected_year}")
+st.dataframe(df_filtered[['title', 'vote_average', 'vote_count', 'release_date', 'budget', 'revenue', 'genres']].head(20))
+
+# Gráfica de distribución de calificaciones
+st.subheader("Distribución de Calificaciones")
+fig, ax = plt.subplots(figsize=(8, 5))
+sns.histplot(df_filtered['vote_average'], bins=20, kde=True, color='blue', edgecolor='black')
+ax.set_title("Distribución de Calificaciones")
 st.pyplot(fig)
 
-# Mostrar dataset final
-st.subheader("Dataset Limpio y Transformado")
-st.dataframe(df.head())
+# Comparación de presupuesto y recaudación
+st.subheader("Relación Presupuesto vs. Recaudación")
+fig, ax = plt.subplots(figsize=(8, 5))
+sns.scatterplot(x=df_filtered['budget'], y=df_filtered['revenue'], alpha=0.7)
+ax.set_xlabel("Presupuesto")
+ax.set_ylabel("Recaudación")
+ax.set_title("Comparación de Presupuesto y Recaudación")
+st.pyplot(fig)
 
-# Guardamos el nuevo Dataset
-df.to_csv('data/peliculas_procesadas.csv', index=False)
-
-# Mostrar el schema final
+# Mostrar el schema final del dataset
 st.subheader("Schema Final del Dataset Procesado")
 st.text(", ".join(df.columns))
-
