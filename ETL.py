@@ -3,7 +3,7 @@ import numpy as np
 import streamlit as st
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+# Commit rama Francisco
 # Cargar el dataset
 df = pd.read_csv('data/TMDB_movie_dataset_v11.csv', low_memory=False)
 
