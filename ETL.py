@@ -29,6 +29,14 @@ df['release_year'] = pd.to_datetime(df['release_date'], errors='coerce').dt.year
 df = df[df['release_year'] >= 2000]  
 
 
+# 6. Filtrar películas con status 'Released'
+df = df[df['status'] == 'Released']
+
+# 7. Eliminando la columna estado (todas ya están en estado released)
+df.drop(columns=['status'], inplace=True)
+
+
+
 # Guardar dataset limpio
 df.to_csv('peliculas_procesadas.csv', index=False)
 
@@ -50,7 +58,7 @@ if selected_genre != "Todos":
 
 # Mostrar dataset filtrado
 st.subheader(f"Películas estrenadas en {selected_year}")
-st.dataframe(df_filtered[['title', 'vote_average', 'vote_count', 'release_date', 'budget', 'revenue', 'genres']].head(20))
+st.dataframe(df_filtered[['title', 'vote_average', 'vote_count', 'release_date', 'budget', 'revenue', 'runtime', 'adult', 'popularity', 'genres', 'production_companies']].head(20))
 
 # Gráfica de distribución de calificaciones
 st.subheader("Distribución de Calificaciones")
