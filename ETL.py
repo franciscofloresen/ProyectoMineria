@@ -8,7 +8,7 @@ import seaborn as sns
 df = pd.read_csv('data/TMDB_movie_dataset_v11.csv', low_memory=False)
 
 # 1. Eliminar columnas irrelevantes
-cols_to_drop = ['homepage', 'backdrop_path', 'poster_path', 'tagline', 'imdb_id']
+cols_to_drop = ['homepage', 'backdrop_path', 'poster_path', 'tagline', 'imdb_id', 'original_language', 'original_title', 'overview',  'production_countries', 'spoken_languages', 'keywords']
 df.drop(columns=[col for col in cols_to_drop if col in df.columns], inplace=True)
 
 # 2. Manejo de valores nulos
@@ -17,11 +17,17 @@ df['revenue'].fillna(df['revenue'].median(), inplace=True)
 df['runtime'].fillna(df['runtime'].median(), inplace=True)
 df.dropna(subset=['title'], inplace=True)  # Eliminar si falta información clave
 
-# 3. Filtrar películas con menos de 10 votos
-df = df[df['vote_count'] >= 10]
+# 3. Filtrar películas entre 2000 y 20000 votos
+df = df[(df['vote_count'] >= 2000) & (df['vote_count'] <= 20000)]
+
 
 # 4. Extraer año de 'release_date'
 df['release_year'] = pd.to_datetime(df['release_date'], errors='coerce').dt.year
+
+
+# 5. Filtrar películas desde el año 2000
+df = df[df['release_year'] >= 2000]  
+
 
 # Guardar dataset limpio
 df.to_csv('peliculas_procesadas.csv', index=False)
