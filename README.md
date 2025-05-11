@@ -44,7 +44,7 @@ pip install pandas numpy matplotlib seaborn streamlit
 
 ### 🔹 **2️⃣ Ejecutar el script en Streamlit**
 ```bash
-streamlit run ETL.py
+streamlit run FinalApp.py
 ```
 
 ### 🔹 **3️⃣ Explorar la interfaz interactiva**
