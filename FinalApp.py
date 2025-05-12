@@ -37,8 +37,7 @@ def load_and_clean_data(file_path: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Columnas irrelevantes
-    drop_cols = ['homepage','backdrop_path','poster_path','tagline','imdb_id',
-                 'original_title','overview','production_countries','spoken_languages','keywords']
+    drop_cols = ['homepage','backdrop_path','poster_path','tagline','imdb_id', 'original_language', 'original_title','overview','production_countries','spoken_languages','keywords']
     df.drop(columns=[c for c in drop_cols if c in df.columns], inplace=True)
 
     # Conversión a numérico y relleno de nulos

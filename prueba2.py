@@ -13,7 +13,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier, VotingClassifier
 from sklearn.metrics import (accuracy_score, roc_auc_score, roc_curve,
                              precision_recall_curve, confusion_matrix)
-from fpdf import FPDF
 
 st.set_page_config(page_title="Éxito de Películas TMDB", layout="wide")
 st.title("🎬 Predicción de Éxito de Películas (TMDB)")
@@ -239,21 +238,5 @@ with st.form("form_pred"):
         prob  = voting.predict_proba(x_new)[0,1]
         st.success(f"Probabilidad de éxito: **{prob:.2%}**")
 
-# ------------------------------------------------------------------
-# 8. DESCARGA DE PDF
-# ------------------------------------------------------------------
-def build_pdf(res_dict):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(0, 10, "Reporte de Modelos TMDB", ln=1)
-    pdf.set_font("Arial", "", 12)
-    for n, r in res_dict.items():
-        pdf.cell(0, 9, f"{n}: Accuracy={r['acc']:.3f} | AUC={r['auc']:.3f}", ln=1)
-    return pdf.output(dest="S").encode("latin-1", "replace")
-
-st.download_button("📥 Descargar PDF", build_pdf(results),
-                   file_name="reporte_tmdb.pdf",
-                   mime="application/pdf")
-
 st.caption("© ITESO – Minería de Datos 2025")
+
