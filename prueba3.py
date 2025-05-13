@@ -6,11 +6,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, MinMaxScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import HistGradientBoostingClassifier, VotingClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (accuracy_score, roc_auc_score, roc_curve, precision_recall_curve, confusion_matrix)
 
 st.set_page_config(page_title="Éxito de Películas TMDB", layout="wide")
@@ -149,9 +149,6 @@ for g in top_genres:
     else:
         df[col_name] = (df['major_genre'] == g).astype(int)
 
-# Convertir 'major_genre' a categórico para que no aparezcan como numéricas
-df['major_genre'] = df['major_genre'].astype('category')
-
 # Calcular el número de géneros
 df['n_genres'] = df['major_genre'].apply(lambda x: len(str(x).split(',')) if pd.notnull(x) else 0)
 
@@ -179,15 +176,26 @@ cat_cols = ['major_genre', 'major_comp'] if 'major_comp' in df_model.columns els
 st.write("Numéricas 👉", num_cols)
 st.write("Categóricas 👉", cat_cols)
 
-# Preprocesamiento con ColumnTransformer
+# Aplicar LabelEncoder a las columnas categóricas
+label_encoders = {}
+for col in cat_cols:
+    le = LabelEncoder()
+    df_model[f'{col}_encoded'] = le.fit_transform(df_model[col])
+    label_encoders[col] = le
+
+# Columnas para el modelo después de la codificación
+encoded_cat_cols = [f'{col}_encoded' for col in cat_cols]
+model_features = num_cols + encoded_cat_cols
+
+# Preprocesamiento con ColumnTransformer solo para las numéricas
 preprocess = ColumnTransformer(
     transformers=[
-        ('num', StandardScaler(), num_cols),
-        ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False, dtype=np.int8), cat_cols),
-    ]
+        ('num', StandardScaler(), num_cols + encoded_cat_cols),
+    ],
+    remainder='passthrough'
 )
 
-X = df_model[num_cols + cat_cols]
+X = df_model[model_features]
 y = df_model[target_col]
 
 # Separación en entrenamiento y prueba
@@ -207,11 +215,11 @@ def train_models(X_tr, y_tr):
             LogisticRegression(solver='liblinear', max_iter=1000),
             {'clf__C':[0.01,0.1,1,10]}
         ),
-        "HistGB": (
-            HistGradientBoostingClassifier(random_state=42),
-            {'clf__learning_rate':[0.03,0.1],
-             'clf__max_iter':[200],
-             'clf__early_stopping':[False]}
+        "RandomForest": (
+            RandomForestClassifier(random_state=42),
+            {'clf__n_estimators':[100, 200],
+             'clf__max_depth':[None, 10, 20],
+             'clf__min_samples_split':[2, 5]}
         )
     }
 
@@ -226,11 +234,12 @@ def train_models(X_tr, y_tr):
 models = train_models(X_train, y_train)
 
 # ------------------------------------------------------------------
-# 6. EVALUACIÓN + ENSAMBLE
+# 6. EVALUACIÓN DE MODELOS
 # ------------------------------------------------------------------
 def evaluate(model, X_te, y_te):
     y_prob = model.predict_proba(X_te)[:,1]
     y_pred = (y_prob >= 0.5).astype(int)
+    
     return {
         "acc": accuracy_score(y_te, y_pred),
         "auc": roc_auc_score(y_te, y_prob),
@@ -240,11 +249,6 @@ def evaluate(model, X_te, y_te):
     }
 
 results = {name: evaluate(m, X_test, y_test) for name, m in models.items()}
-
-# Soft-voting ensemble
-voting = VotingClassifier(estimators=list(models.items()), voting='soft')
-voting.fit(X_train, y_train)
-results["Ensemble"] = evaluate(voting, X_test, y_test)
 
 # ------------------------------------------------------------------
 # 7. VISUALIZACIÓN
@@ -265,35 +269,91 @@ for name, res in results.items():
     fpr, tpr, _ = res['roc']
     fig, ax = plt.subplots(); ax.plot(fpr, tpr); ax.set_title("ROC"); st.pyplot(fig)
 
+    # Importancia de características (solo para RandomForest)
+    if name == "RandomForest":
+        try:
+            # Obtener el modelo RandomForest subyacente
+            rf_model = models["RandomForest"].named_steps['clf']
+            
+            # Obtener importancia de características
+            importances = rf_model.feature_importances_
+            
+            # Crear un DataFrame para visualizar la importancia
+            feature_importance_df = pd.DataFrame({
+                'Feature': model_features,
+                'Importance': importances
+            })
+            
+            # Asignar nombres originales a las características codificadas
+            for col in cat_cols:
+                encoded_col = f'{col}_encoded'
+                if encoded_col in feature_importance_df['Feature'].values:
+                    idx = feature_importance_df[feature_importance_df['Feature'] == encoded_col].index[0]
+                    feature_importance_df.loc[idx, 'Feature'] = col
+            
+            # Ordenar por importancia descendente
+            feature_importance_df = feature_importance_df.sort_values('Importance', ascending=False)
+            
+            # Visualizar las 15 características más importantes
+            top_features = feature_importance_df.head(15)
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.barh(range(len(top_features)), top_features['Importance'], align='center')
+            ax.set_yticks(range(len(top_features)))
+            ax.set_yticklabels(top_features['Feature'])
+            ax.set_title("Importancia de características")
+            ax.set_xlabel("Importancia")
+            
+            st.pyplot(fig)
+        except Exception as e:
+            st.warning(f"No se pudo mostrar la importancia de características: {e}")
+
 # ------------------------------------------------------------------
 # 8. PREDICCIÓN INDIVIDUAL
 # ------------------------------------------------------------------
 st.header("🔮 Predicción individual")
+
+# Seleccionar el mejor modelo basado en AUC
+best_model_name = max(results, key=lambda x: results[x]['auc'])
+best_model = models[best_model_name]
+st.info(f"📈 Utilizando el mejor modelo: **{best_model_name}** (AUC: {results[best_model_name]['auc']:.3f})")
+
 with st.form("form_pred"):
     user_in = {}
     for f in base_feats:
         if f in df_model.columns:
             user_in[f] = st.number_input(f, value=float(df_model[f].median()))
-    if 'major_comp' in df_model.columns:
-        user_in['major_comp'] = st.selectbox("Compañía principal", df_model['major_comp'].value_counts().index[:20])
-    if 'major_genre' in df_model.columns:
-        user_in['major_genre'] = st.selectbox("Genero principal", df_model['major_genre'].value_counts().index[:20])
+    
+    # Usar selectbox para las categóricas originales, no las codificadas
+    for col in cat_cols:
+        user_in[col] = st.selectbox(f"{col.replace('_', ' ').title()}", 
+                                   df_model[col].value_counts().index[:20])
 
     # Botón de envío
     submitted = st.form_submit_button("Predecir")
     if submitted:
-        x_new = pd.DataFrame([user_in])
         try:
-            # Verificar y agregar columnas faltantes con valor 0
-            missing_cols = [col for col in feature_cols if col not in x_new.columns]
-            for col in missing_cols:
-                x_new[col] = 0  # Asignar valor 0 si falta alguna columna
-
+            # Crear DataFrame con la entrada del usuario
+            x_new = pd.DataFrame([user_in])
+            
+            # Codificar las categóricas usando los LabelEncoder existentes
+            for col in cat_cols:
+                le = label_encoders[col]
+                # Manejar valores desconocidos
+                if x_new[col].iloc[0] in le.classes_:
+                    x_new[f'{col}_encoded'] = le.transform(x_new[col])
+                else:
+                    # Usar el valor más común si el valor es desconocido
+                    st.warning(f"Valor '{x_new[col].iloc[0]}' no visto en entrenamiento para '{col}'. Usando un valor común.")
+                    x_new[f'{col}_encoded'] = 0
+            
+            # Seleccionar solo las columnas que el modelo espera
+            x_pred = x_new[model_features]
+            
             # Realizar la predicción
-            prob = voting.predict_proba(x_new)[0, 1]
+            prob = best_model.predict_proba(x_pred)[0, 1]
             st.success(f"Probabilidad de éxito: **{prob:.2%}**")
         except Exception as e:
             st.error(f"Error en la predicción: {e}")
-
 
 st.caption("© ITESO – Minería de Datos 2025")
